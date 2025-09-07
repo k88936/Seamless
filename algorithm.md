@@ -4,26 +4,26 @@
 
 Let `SampleImage` contain the image we are sampling from and let `Image` be the mostly empty image that we want to fill in (if synthesizing from scratch, it should contain a 3-by-3 seed in the center randomly taken from `SampleImage`; for constrained synthesis, it should contain all the known pixels).
 
-`WindowSize`, the size of the neighborhood window, is the only user-settable parameter. The main portion of the algorithm is presented below:
+`WindowSize`, the size of the neighborhood window is the only user-settable parameter. The main portion of the algorithm is presented below:
 
 ```psudo code
 function GrowImage(SampleImage, Image, WindowSize)
-while Image not filled do
-progress = 0
-PixelList = GetUnfilledNeighbors(Image)
-foreach Pixel in PixelList do
-Template = GetNeighborhoodWindow(Pixel)
-BestMatches = FindMatches(Template, SampleImage)
-BestMatch = RandomPick(BestMatches)
-if (BestMatch.error < MaxErrThreshold) then
-Pixel.value = BestMatch.value
-progress = 1
-end
-end
-if progress == 0 then
-MaxErrThreshold = MaxErrThreshold * 1.1
-end
-return Image
+    while Image not filled do
+        progress = 0
+        PixelList = GetUnfilledNeighbors(Image)
+        foreach Pixel in PixelList do
+            Template = GetNeighborhoodWindow(Pixel)
+            BestMatches = FindMatches(Template, SampleImage)
+            BestMatch = RandomPick(BestMatches)
+            if (BestMatch.error < MaxErrThreshold) then
+                Pixel.value = BestMatch.value
+            progress = 1
+            end
+        end
+        if progress == 0 then
+            MaxErrThreshold = MaxErrThreshold * 1.1
+    end
+    return Image
 end
 ```
 
@@ -38,18 +38,18 @@ Function `GetUnfilledNeighbors()` returns a list of all unfilled pixels that hav
 
 ```psudo code
 function FindMatches(Template, SampleImage)
-ValidMask = 1s where Template is filled, 0s otherwise
-GaussMask = Gaussian2D(WindowSize, Sigma)
-TotWeight = sum_{i,j} GaussMask(i,j)*ValidMask(i,j)
-for i,j do
-for ii,jj do
-dist = (Template(ii,jj) - SampleImage(i-ii, j-jj))^2
-SSD(i,j) = SSD(i,j) + dist * ValidMask(ii,jj) * GaussMask(ii,jj)
-end
-SSD(i,j) = SSD(i,j) / TotWeight
-end
-PixelList = all pixels (i,j) where SSD(i,j) <= min(SSD)*(1 + ErrThreshold)
-return PixelList
+    ValidMask = 1s where Template is filled, 0s otherwise
+    GaussMask = Gaussian2D(WindowSize, Sigma)
+    TotWeight = sum_{i,j} GaussMask(i,j)*ValidMask(i,j)
+    for i,j do
+        for ii,jj do
+            dist = (Template(ii,jj) - SampleImage(i-ii, j-jj))^2
+            SSD(i,j) = SSD(i,j) + dist * ValidMask(ii,jj) * GaussMask(ii,jj)
+        end
+        SSD(i,j) = SSD(i,j) / TotWeight
+    end
+    PixelList = all pixels (i,j) where SSD(i,j) <= min(SSD)*(1 + ErrThreshold)
+    return PixelList
 end
 ```
 
