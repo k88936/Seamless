@@ -6,7 +6,7 @@ from seamless import grow_image
 
 
 def load(path):
-    """Load a color image and normalize values to [0, 1] range"""
+    """Load a color image and normalize values to [0, 1] ranges"""
     img = cv2.imread(path, cv2.IMREAD_COLOR)
     if img is not None:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
@@ -33,8 +33,8 @@ def initialize_image_from_seed(sample, size=(256, 256), seed_size=3):
 # Load sample image
 sample = load("img.png")
 
-# Initialize target image with a random seed from the sample
-image = initialize_image_from_seed(sample, size=(512, 512))
+# Initialize the target image with a random seed from the sample
+image = initialize_image_from_seed(sample, size=(64,64))
 
 # Run the algorithm
 window_size = 7

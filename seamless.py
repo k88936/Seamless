@@ -4,6 +4,8 @@ import psutil
 import os
 from scipy.ndimage import binary_dilation
 from itertools import product
+from concurrent.futures import ThreadPoolExecutor
+import multiprocessing as mp
 
 # Constants
 ERR_THRESHOLD = 0.1
@@ -38,22 +40,28 @@ def find_matches(template, sample_image, valid_mask, gauss_mask, tot_weight):
     pad = window_size // 2
     padded_sample = np.pad(sample_image, ((pad, pad), (pad, pad), (0, 0)), mode='reflect')
 
-    # Iterate over each possible patch in sample image
-    for i in range(h):
-        for j in range(w):
-            patch = padded_sample[i:i + window_size, j:j + window_size, :]
-            diff = (template - patch) * valid_mask[..., np.newaxis]
-            weighted_ssd = np.sum((diff ** 2) * gauss_mask[..., np.newaxis] * valid_mask[..., np.newaxis])
-            if tot_weight > 0:
-                ssd_map[i, j] = weighted_ssd / tot_weight
-            else:
-                ssd_map[i, j] = float('inf')
+    def compute_ssd(args):
+        """Compute SSD for a single patch."""
+        i, j = args
+        patch = padded_sample[i:i + window_size, j:j + window_size, :]
+        diff = (template - patch) * valid_mask[..., np.newaxis]
+        weighted_ssd = np.sum((diff ** 2) * gauss_mask[..., np.newaxis] * valid_mask[..., np.newaxis])
+        if tot_weight > 0:
+            return i, j, weighted_ssd / tot_weight
+        else:
+            return i, j, float('inf')
+
+    for i, j  in product(range(h), range(w)):
+        _,_,ssd = compute_ssd((i, j))
+        ssd_map[i, j] = ssd
+
+
 
     min_ssd = np.min(ssd_map[np.isfinite(ssd_map)])
     threshold = min_ssd * (1 + ERR_THRESHOLD)
     candidates = np.where(ssd_map <= threshold)
     indices = list(zip(candidates[0], candidates[1]))
-    
+
     return [sample_image[i, j, :] for i, j in indices]
 
 
@@ -90,11 +98,10 @@ def grow_image(sample_image, image, window_size):
     current_threshold = MAX_ERR_THRESHOLD
     max_iterations = 1000  # Prevent infinite loops
     iteration = 0
-    total_pixels = np.sum(np.all(image == -1, axis=2))  # Count unfilled pixels
+    total_pixels = np.sum(np.sum(image == -1, axis=2) == 3)  # Count unfilled pixels
 
     # Initialize resource monitoring
     process = psutil.Process(os.getpid())
-    total_pixels = np.sum(np.all(image == -1, axis=2))  # Count unfilled pixels
 
     while True:
         iteration += 1
@@ -109,11 +116,12 @@ def grow_image(sample_image, image, window_size):
             break
 
         # Calculate progress percentage
-        remaining_pixels = np.sum(np.all(image == -1, axis=2))
+        remaining_pixels = np.sum(np.sum(image == -1, axis=2) == 3)
         filled_pixels = total_pixels - remaining_pixels
         progress_percent = (filled_pixels / total_pixels) * 100
         elapsed_time = time.time() - start_time
-        print(f"Processing: {progress_percent:.2f}% complete, {remaining_pixels} pixels remaining, time: {elapsed_time:.2f}s")
+        print(
+            f"Processing: {progress_percent:.2f}% complete, {remaining_pixels} pixels remaining, time: {elapsed_time:.2f}s")
 
         progress = False
         for x, y in pixel_list:
@@ -136,10 +144,6 @@ def grow_image(sample_image, image, window_size):
             print(f"Progress made. Threshold: {current_threshold:.3f}")
 
         total_time = time.time() - start_time
-        mem_usage = process.memory_info().rss / 1024 / 1024  # MB
-        cpu_percent = psutil.cpu_percent(interval=0.1)  # Overall CPU usage
-        print(f"Image growth completed in {total_time:.2f} seconds")
-        print(f"Final memory usage: {mem_usage:.2f} MB, System CPU: {cpu_percent:.1f}%")
-    total_time = time.time() - start_time
-    print(f"Image growth completed in {total_time:.2f} seconds")
+        pixels_per_second = filled_pixels / total_time if total_time > 0 else 0
+        print(f"Processing speed: {pixels_per_second:.2f} pixels/second")
     return image
