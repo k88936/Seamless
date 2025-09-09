@@ -51,11 +51,9 @@ def find_matches(template, sample_image, valid_mask, gauss_mask, tot_weight):
         else:
             return i, j, float('inf')
 
-    for i, j  in product(range(h), range(w)):
-        _,_,ssd = compute_ssd((i, j))
+    for i, j in product(range(h), range(w)):
+        _, _, ssd = compute_ssd((i, j))
         ssd_map[i, j] = ssd
-
-
 
     min_ssd = np.min(ssd_map[np.isfinite(ssd_map)])
     threshold = min_ssd * (1 + ERR_THRESHOLD)
@@ -118,24 +116,24 @@ def grow_image(sample_image, image, window_size):
         # Calculate progress percentage
         remaining_pixels = np.sum(np.sum(image == -1, axis=2) == 3)
         filled_pixels = total_pixels - remaining_pixels
-        progress_percent = (filled_pixels / total_pixels) * 100
-        elapsed_time = time.time() - start_time
-        print(
-            f"Processing: {progress_percent:.2f}% complete, {remaining_pixels} pixels remaining, time: {elapsed_time:.2f}s")
 
         progress = False
-        for x, y in pixel_list:
+
+        def process(pos):
+            x, y = pos
             template = get_neighborhood_window(image, (x, y), window_size)
             valid_mask = np.any(template != -1, axis=2).astype(float)
             tot_weight = np.sum(gauss_mask * valid_mask)
-
             matches = find_matches(template, sample_image, valid_mask, gauss_mask, tot_weight)
             if not matches:
-                continue
-
+                return False
             matched_value = matches[np.random.choice(len(matches))]
             image[y, x, :] = matched_value
-            progress = True
+            return True
+
+        with ThreadPoolExecutor(max_workers=mp.cpu_count()*2) as executor:
+            results = list(executor.map(process, pixel_list))
+        progress = any(results)
 
         if not progress:
             current_threshold *= 1.1
